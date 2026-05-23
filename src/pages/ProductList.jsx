@@ -127,7 +127,11 @@ export default function ProductList() {
                         <td className="p-3 font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors">{prod.title}</td>
                       )}
                       {activeColumns.category && <td className="p-3 text-slate-500 capitalize">{prod.category}</td>}
-                      {activeColumns.price && <td className="p-3 font-bold text-slate-800">{formatCurrency(prod.price)}</td>}
+                      {activeColumns.price && (
+  <td className="p-3 font-bold text-slate-800">
+    {formatCurrency(prod.price * 84)} 
+  </td>
+)}
                       {activeColumns.stock && (
                         <td className="p-3">
                           <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold border ${badge.statusClass}`}>{badge.text}</span>

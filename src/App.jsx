@@ -1,7 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import DashboardLayout from './layouts/DashboardLayout';
-import ProductList from './pages/ProductList'; 
+import ProductList from './pages/ProductList';
 
 const PlaceholderAnalytics = () => (
   <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-2xs">
@@ -21,5 +21,4 @@ export default function App() {
       </DashboardLayout>
     </BrowserRouter>
   );
-}
 }
