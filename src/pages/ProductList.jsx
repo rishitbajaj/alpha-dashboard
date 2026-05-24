@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom'; // <--- Added useSearchParams directly here
 import { useProducts } from '../hooks/useProducts';
 import { useDebounce } from '../hooks/useDebounce';
 import { formatCurrency, getStockStatusDetails } from '../utils/formatters';
@@ -8,11 +8,15 @@ const SEGMENT_SIZE = 7;
 
 export default function ProductList() {
   const routerNavigate = useNavigate();
+  const [searchParams] = useSearchParams(); // <--- Forces component to re-render when URL changes
+  
   const { computedProducts, extractedCategories, loading, activeFilters, alterUrlState } = useProducts();
 
+  // Local state tracking input keywords
   const [inputTerm, setInputTerm] = useState(activeFilters.query);
   const debouncedSearch = useDebounce(inputTerm, 300);
 
+  // Column switches toggle matrix
   const [activeColumns, setActiveColumns] = useState({
     thumbnail: true, 
     title: true, 
@@ -22,33 +26,61 @@ export default function ProductList() {
     rating: true
   });
 
+  // Sync search keyword inputs to URL parameters
   useEffect(() => {
-    alterUrlState('q', debouncedSearch);
-  }, [debouncedSearch, alterUrlState]);
+    
+    if (debouncedSearch.toLowerCase().trim() !== activeFilters.query.toLowerCase().trim()) {
+      alterUrlState('q', debouncedSearch);
+    }
+  }, [debouncedSearch, activeFilters.query, alterUrlState]);
 
+  // Sync input field text box if URL changes externally
+  useEffect(() => {
+    setInputTerm(activeFilters.query);
+  }, [activeFilters.query]);
+
+  // Read active page index directly from current live URL state parameters
+  const currentUrlPage = useMemo(() => {
+    return parseInt(searchParams.get('page') || '1', 10);
+  }, [searchParams]);
+
+  // Compute boundaries for maximum pagination depths
+  const maxPages = useMemo(() => {
+    return Math.max(1, Math.ceil(computedProducts.length / SEGMENT_SIZE));
+  }, [computedProducts]);
+
+  // Sanitize and constrain the page tracker index limits
+  const safePageIndex = useMemo(() => {
+    if (currentUrlPage < 1) return 1;
+    if (currentUrlPage > maxPages) return maxPages;
+    return currentUrlPage;
+  }, [currentUrlPage, maxPages]);
+
+  // CRITICAL CALCULATION: Slice array segments derived from URL state changes
   const paginatedRows = useMemo(() => {
-    const offsetStart = (activeFilters.pageIndex - 1) * SEGMENT_SIZE;
-    return computedProducts.slice(offsetStart, offsetStart + SEGMENT_SIZE);
-  }, [computedProducts, activeFilters.pageIndex]);
-
-  const maxPages = Math.max(1, Math.ceil(computedProducts.length / SEGMENT_SIZE));
+    const startPoint = (safePageIndex - 1) * SEGMENT_SIZE;
+    const endPoint = startPoint + SEGMENT_SIZE;
+    return computedProducts.slice(startPoint, endPoint);
+  }, [computedProducts, safePageIndex]);
 
   return (
     <div className="space-y-6">
-
+      {/* SECTION 1: HEADER & VIEW FILTERS INTERACTION */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold text-slate-900 tracking-tight">System Stock Ledger</h1>
           <p className="text-xs text-slate-500 mt-0.5">Filter, search, inspect, and toggle internal inventory records metrics.</p>
         </div>
         
+        {/* Dynamic Column Management Controls Layout */}
         <div className="flex flex-wrap gap-1.5 p-1 bg-white border border-slate-200 rounded-lg text-[11px] font-medium text-slate-500 shadow-2xs">
           <span className="self-center px-1.5 text-slate-400 font-semibold">Columns:</span>
           {Object.keys(activeColumns).map(col => (
             <button 
               key={col} 
+              type="button"
               onClick={() => setActiveColumns(prev => ({ ...prev, [col]: !prev[col] }))}
-              className={`px-2 py-0.5 rounded capitalize transition-colors ${
+              className={`px-2 py-0.5 rounded capitalize transition-colors cursor-pointer ${
                 activeColumns[col] 
                   ? 'bg-indigo-50 text-indigo-600 font-semibold' 
                   : 'hover:bg-slate-50 text-slate-400'
@@ -60,6 +92,7 @@ export default function ProductList() {
         </div>
       </div>
 
+      {/* SECTION 2: CONTROL FILTERS INPUT CONSOLE PANEL */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 bg-white p-3.5 rounded-xl border border-slate-200/60 shadow-2xs">
         <input 
           type="text" 
@@ -91,6 +124,7 @@ export default function ProductList() {
         </select>
       </div>
 
+      {/* SECTION 3: SYSTEM DATA VIEWPORT GRID */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
         {loading ? (
           <div className="p-12 text-center text-xs text-slate-400 font-medium tracking-wide">Reading baseline registry values...</div>
@@ -128,10 +162,8 @@ export default function ProductList() {
                       )}
                       {activeColumns.category && <td className="p-3 text-slate-500 capitalize">{prod.category}</td>}
                       {activeColumns.price && (
-  <td className="p-3 font-bold text-slate-800">
-    {formatCurrency(prod.price * 84)} 
-  </td>
-)}
+                        <td className="p-3 font-bold text-slate-800">{formatCurrency(prod.price * 84)}</td>
+                      )}
                       {activeColumns.stock && (
                         <td className="p-3">
                           <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold border ${badge.statusClass}`}>{badge.text}</span>
@@ -146,20 +178,31 @@ export default function ProductList() {
           </div>
         )}
 
+        {/* SECTION 4: STRUCTURAL PAGINATION CONTROL ELEMENT BAR */}
         {!loading && computedProducts.length > 0 && (
           <div className="px-4 py-3 bg-slate-50/50 border-t border-slate-100 flex items-center justify-between text-[11px] font-medium">
-            <span className="text-slate-400">Page <strong className="text-slate-700 font-bold">{activeFilters.pageIndex}</strong> of <strong className="text-slate-700 font-bold">{maxPages}</strong></span>
+            <span className="text-slate-400">
+              Page <strong className="text-slate-700 font-bold">{safePageIndex}</strong> of <strong className="text-slate-700 font-bold">{maxPages}</strong>
+            </span>
             <div className="flex gap-1">
               <button 
-                disabled={activeFilters.pageIndex === 1} 
-                onClick={() => alterUrlState('page', String(activeFilters.pageIndex - 1))} 
+                type="button"
+                disabled={safePageIndex <= 1} 
+                onClick={(e) => {
+                  e.preventDefault();
+                  alterUrlState('page', safePageIndex - 1);
+                }} 
                 className="px-2.5 py-1 bg-white border border-slate-200 rounded text-slate-600 font-semibold disabled:opacity-40 hover:bg-slate-50 cursor-pointer transition-colors disabled:cursor-not-allowed"
               >
                 Prev
               </button>
               <button 
-                disabled={activeFilters.pageIndex === maxPages} 
-                onClick={() => alterUrlState('page', String(activeFilters.pageIndex + 1))} 
+                type="button"
+                disabled={safePageIndex >= maxPages} 
+                onClick={(e) => {
+                  e.preventDefault();
+                  alterUrlState('page', safePageIndex + 1);
+                }} 
                 className="px-2.5 py-1 bg-white border border-slate-200 rounded text-slate-600 font-semibold disabled:opacity-40 hover:bg-slate-50 cursor-pointer transition-colors disabled:cursor-not-allowed"
               >
                 Next

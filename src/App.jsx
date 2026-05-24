@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import DashboardLayout from './layouts/DashboardLayout';
 import ProductList from './pages/ProductList';
 import Analytics from './pages/Analytics';
-import ProductDetail from './pages/ProductDetail'; 
+import ProductDetail from './pages/ProductDetail';
 
 export default function App() {
   return (
@@ -12,7 +12,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<ProductList />} />
           <Route path="/analytics" element={<Analytics />} />
-          <Route path="/product/:id" element={<ProductDetail />} /> 
+          <Route path="/product/:id" element={<ProductDetail />} />
         </Routes>
       </DashboardLayout>
     </BrowserRouter>
