@@ -1,14 +1,16 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom'; // <--- Added useSearchParams directly here
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useProducts } from '../hooks/useProducts';
 import { useDebounce } from '../hooks/useDebounce';
+import { useAuth } from '../context/AuthContext'; 
 import { formatCurrency, getStockStatusDetails } from '../utils/formatters';
 
 const SEGMENT_SIZE = 7;
 
 export default function ProductList() {
   const routerNavigate = useNavigate();
-  const [searchParams] = useSearchParams(); // <--- Forces component to re-render when URL changes
+  const [searchParams] = useSearchParams();
+  const { role, unpublishedIds, togglePublishStatus } = useAuth(); 
   
   const { computedProducts, extractedCategories, loading, activeFilters, alterUrlState } = useProducts();
 
@@ -26,9 +28,8 @@ export default function ProductList() {
     rating: true
   });
 
-  // Sync search keyword inputs to URL parameters
+  // Sync search keyword inputs to URL parameters safely without layout loops
   useEffect(() => {
-    
     if (debouncedSearch.toLowerCase().trim() !== activeFilters.query.toLowerCase().trim()) {
       alterUrlState('q', debouncedSearch);
     }
@@ -56,7 +57,7 @@ export default function ProductList() {
     return currentUrlPage;
   }, [currentUrlPage, maxPages]);
 
-  // CRITICAL CALCULATION: Slice array segments derived from URL state changes
+  // Slice array segments derived from URL state changes
   const paginatedRows = useMemo(() => {
     const startPoint = (safePageIndex - 1) * SEGMENT_SIZE;
     const endPoint = startPoint + SEGMENT_SIZE;
@@ -69,7 +70,9 @@ export default function ProductList() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold text-slate-900 tracking-tight">System Stock Ledger</h1>
-          <p className="text-xs text-slate-500 mt-0.5">Filter, search, inspect, and toggle internal inventory records metrics.</p>
+          <p className="text-xs text-slate-500 mt-0.5 animate-pulse text-indigo-600 font-medium">
+            Viewing system as: <span className="uppercase font-bold underline">{role} Mode</span>
+          </p>
         </div>
         
         {/* Dynamic Column Management Controls Layout */}
@@ -141,16 +144,22 @@ export default function ProductList() {
                   {activeColumns.price && <th className="p-3">Price Point</th>}
                   {activeColumns.stock && <th className="p-3">Ledger Status</th>}
                   {activeColumns.rating && <th className="p-3">Rating Score</th>}
+                  {/* ADMIN RBAC FLAG: Dynamically mount the extra control header if user is admin */}
+                  {role === 'admin' && <th className="p-3 w-32 text-center">Status Toggle</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
                 {paginatedRows.map(prod => {
                   const badge = getStockStatusDetails(prod.stock);
+                  const isDraft = unpublishedIds.has(prod.id);
+                  
                   return (
                     <tr 
                       key={prod.id} 
                       onClick={() => routerNavigate(`/product/${prod.id}`)} 
-                      className="hover:bg-indigo-50/20 cursor-pointer transition-colors group"
+                      className={`hover:bg-indigo-50/20 cursor-pointer transition-colors group ${
+                        isDraft ? 'bg-slate-50/70 opacity-75' : ''
+                      }`}
                     >
                       {activeColumns.thumbnail && (
                         <td className="p-3 pl-4 text-center">
@@ -158,7 +167,14 @@ export default function ProductList() {
                         </td>
                       )}
                       {activeColumns.title && (
-                        <td className="p-3 font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors">{prod.title}</td>
+                        <td className="p-3 font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors">
+                          {prod.title}
+                          {isDraft && (
+                            <span className="ml-2 text-[9px] font-bold text-rose-500 bg-rose-50 px-1 py-0.5 rounded border border-rose-100 uppercase">
+                              Draft
+                            </span>
+                          )}
+                        </td>
                       )}
                       {activeColumns.category && <td className="p-3 text-slate-500 capitalize">{prod.category}</td>}
                       {activeColumns.price && (
@@ -170,6 +186,23 @@ export default function ProductList() {
                         </td>
                       )}
                       {activeColumns.rating && <td className="p-3 font-semibold text-amber-600">★ {prod.rating}</td>}
+                      
+                      {/* ADMIN ACTIONS INTERACTION CELL: Stop propagation prevents triggering row details routing */}
+                      {role === 'admin' && (
+                        <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            onClick={() => togglePublishStatus(prod.id)}
+                            className={`px-2 py-1 rounded text-[10px] font-bold border transition-all cursor-pointer shadow-3xs ${
+                              isDraft 
+                                ? 'bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100' 
+                                : 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100'
+                            }`}
+                          >
+                            {isDraft ? '📁 Make Published' : '👁️ Hide to Draft'}
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}

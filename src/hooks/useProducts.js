@@ -1,20 +1,20 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 export function useProducts() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const { role, unpublishedIds } = useAuth(); 
   
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Read current filters from the active URL string
   const query = searchParams.get('q') || '';
   const currentCategory = searchParams.get('category') || 'all';
   const sortingMetric = searchParams.get('sort') || 'default';
   const pageIndex = parseInt(searchParams.get('page') || '1', 10);
 
-  // Fetch initial raw baseline data array
   useEffect(() => {
     const loadInventoryData = async () => {
       try {
@@ -32,15 +32,19 @@ export function useProducts() {
     loadInventoryData();
   }, []);
 
-  // Isolate distinct categories for dropdown lists
   const extractedCategories = useMemo(() => {
     const rawDistinctTags = new Set(products.map(item => item.category));
     return ['all', ...Array.from(rawDistinctTags)];
   }, [products]);
 
-  // Compute filtering and sorting conditions
+  // Handle live role-based visibility matrix processing
   const computedProducts = useMemo(() => {
     let processStream = [...products];
+
+    // RBAC RULE: If standard user tier, completely remove unpublished items
+    if (role === 'user') {
+      processStream = processStream.filter(prod => !unpublishedIds.has(prod.id));
+    }
 
     if (query.trim() !== '') {
       const standardKeyword = query.toLowerCase().trim();
@@ -63,23 +67,18 @@ export function useProducts() {
     }
 
     return processStream;
-  }, [products, query, currentCategory, sortingMetric]);
+  }, [products, query, currentCategory, sortingMetric, role, unpublishedIds]);
 
-  // CRITICAL FIX: Overwrite URL parameters explicitly by instantiating a fresh map object
   const alterUrlState = useCallback((property, incomingValue) => {
     const workingMap = new URLSearchParams(window.location.search);
-    
     if (incomingValue && incomingValue !== 'all' && incomingValue !== 'default' && incomingValue !== '') {
       workingMap.set(property, String(incomingValue));
     } else {
       workingMap.delete(property);
     }
-    
-    // Safety Reset: Reset pagination to page 1 ONLY if changing search queries or categories
     if (property === 'q' || property === 'category') {
       workingMap.delete('page'); 
     }
-    
     setSearchParams(workingMap);
   }, [setSearchParams]);
 
@@ -89,12 +88,7 @@ export function useProducts() {
     extractedCategories,
     loading,
     error,
-    activeFilters: {
-      query,
-      currentCategory,
-      sortingMetric,
-      pageIndex
-    },
+    activeFilters: { query, currentCategory, sortingMetric, pageIndex },
     alterUrlState
   };
 }
